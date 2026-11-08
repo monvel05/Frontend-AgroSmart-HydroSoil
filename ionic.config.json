@@ -1,0 +1,7 @@
+{
+  "name": "AgroSmart-HydroSoil",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "angular-standalone"
+}
