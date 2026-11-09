@@ -1,21 +1,804 @@
-<ion-header [translucent]="true">
-  <ion-toolbar>
-    <ion-title> Blank </ion-title>
-  </ion-toolbar>
-</ion-header>
-
 <ion-content [fullscreen]="true">
-  <ion-header collapse="condense">
-    <ion-toolbar>
-      <ion-title size="large">Blank</ion-title>
-    </ion-toolbar>
-  </ion-header>
+  <div class="app-shell">
+    <!-- BARRA LATERAL DE NAVEGACIÓN (Dark Green #0A3323) -->
+    <aside class="sidebar">
+      <div class="brand-box">
+        <div class="logo-circle">AH</div>
+        <div>
+          <h2>AgroSmart</h2>
+          <span>Hydro-Soil • UTC</span>
+        </div>
+      </div>
 
-  <div id="container">
-    <strong>Ready to create an app?</strong>
-    <p>
-      Start with Ionic
-      <a target="_blank" rel="noopener noreferrer" href="https://ionicframework.com/docs/components">UI Components</a>
-    </p>
+      <nav class="nav-menu">
+        <button
+          type="button"
+          class="nav-item"
+          [class.active]="vistaActiva === 'dashboard'"
+          (click)="cambiarVista('dashboard')"
+        >
+          <span class="nav-dot"></span>
+          <div>
+            <strong>Dashboard y Sensores</strong>
+            <small>Telemetría pH, EC, Humedad</small>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          class="nav-item"
+          [class.active]="vistaActiva === 'riegos'"
+          (click)="cambiarVista('riegos')"
+        >
+          <span class="nav-dot"></span>
+          <div>
+            <strong>Riegos Manuales e IA</strong>
+            <small>Previsión y Fertirriego A/B</small>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          class="nav-item"
+          [class.active]="vistaActiva === 'bitacoras'"
+          (click)="cambiarVista('bitacoras')"
+        >
+          <span class="nav-dot"></span>
+          <div>
+            <strong>Bitácoras y Plagas (IA)</strong>
+            <small>Minería de Texto NLP</small>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          class="nav-item"
+          [class.active]="vistaActiva === 'circuitos'"
+          (click)="cambiarVista('circuitos')"
+        >
+          <span class="nav-dot"></span>
+          <div>
+            <strong>Circuitos IoT (ESP32)</strong>
+            <small>Áreas de Riego y Seguridad</small>
+          </div>
+        </button>
+      </nav>
+
+      <!-- Estado de Conexión y Modelos de Colab -->
+      <div class="sidebar-status" *ngIf="dashboardData">
+        <div class="status-pill" [class.online]="agroService.backendConnected">
+          <span class="pulse"></span>
+          {{ agroService.backendConnected ? 'FastAPI Conectado' : 'Modo Local Respaldo' }}
+        </div>
+        <p class="db-text">{{ dashboardData.database_status }}</p>
+        <div class="ia-mini-box">
+          <strong>Entorno Modelos Colab:</strong>
+          <span>• NLP Plagas: Listo</span>
+          <span>• IA Riego: Listo</span>
+        </div>
+        <button type="button" class="btn-seed" (click)="restaurarDatosPrueba()">
+          Restaurar Datos de Prueba (Seed)
+        </button>
+      </div>
+
+      <div class="user-footer" *ngIf="usuario">
+        <div class="user-info">
+          <strong>{{ usuario.nombre }}</strong>
+          <small>{{ usuario.agricultor_id }} • {{ usuario.rol }}</small>
+        </div>
+        <button type="button" class="btn-logout" (click)="cerrarSesion()">Salir</button>
+      </div>
+    </aside>
+
+    <!-- CONTENIDO PRINCIPAL -->
+    <main class="main-area">
+      <!-- Notificación flotante -->
+      <div class="toast-banner" *ngIf="mensajeToast">
+        <span>{{ mensajeToast }}</span>
+        <button type="button" (click)="mensajeToast = ''">✕</button>
+      </div>
+
+      <!-- CABECERA SUPERIOR CON FILTROS DE CIRCUITO Y CULTIVO -->
+      <header class="topbar">
+        <div>
+          <h1>
+            <ng-container *ngIf="vistaActiva === 'dashboard'">
+              Dashboard de Telemetría Hídrica y Ambiental
+            </ng-container>
+            <ng-container *ngIf="vistaActiva === 'riegos'">
+              Configuración de Riegos Manuales y Previsión con IA
+            </ng-container>
+            <ng-container *ngIf="vistaActiva === 'bitacoras'">
+              Bitácoras de Campo y Detección de Plagas (Minería de Texto)
+            </ng-container>
+            <ng-container *ngIf="vistaActiva === 'circuitos'">
+              Gestión Multi-Circuito IoT (ESP32) y Seguridad en Campo
+            </ng-container>
+          </h1>
+          <p class="top-subtitle">
+            Monitoreo sincronizado con las 4 colecciones de MongoDB y adaptadores para modelos de Google Colab.
+          </p>
+        </div>
+
+        <div class="filter-controls">
+          <div class="filter-field">
+            <label>Circuito ESP32 / Área:</label>
+            <select [(ngModel)]="filtroDispositivo" (change)="cargarDatos()">
+              <option value="todos">Todos los circuitos ({{ circuitos.length }})</option>
+              <option *ngFor="let c of circuitos" [value]="c.dispositivo_id">
+                {{ c.dispositivo_id }} — {{ c.sector_id }}
+              </option>
+            </select>
+          </div>
+
+          <div class="filter-field">
+            <label>Sistema de Cultivo:</label>
+            <select [(ngModel)]="filtroCultivo" (change)="cargarDatos()">
+              <option value="todos">Rodado + Hidropónico</option>
+              <option value="rodado">Riego Rodado (Suelo)</option>
+              <option value="hidroponico">Hidropónico (Sustrato/NFT)</option>
+            </select>
+          </div>
+        </div>
+      </header>
+
+      <!-- ====================================================================
+           VISTA 1: DASHBOARD PRINCIPAL Y LECTURAS DE SENSORES
+           ==================================================================== -->
+      <section *ngIf="vistaActiva === 'dashboard' && dashboardData" class="view-section">
+        <!-- Tarjetas de Resumen General -->
+        <div class="kpi-grid">
+          <div class="kpi-card primary">
+            <span class="kpi-label">Circuitos ESP32 Registrados</span>
+            <strong class="kpi-value">{{ dashboardData.resumen.total_circuitos }}</strong>
+            <small>{{ dashboardData.resumen.valvulas_abiertas }} electroválvulas abiertas ahora</small>
+          </div>
+
+          <div class="kpi-card midnight">
+            <span class="kpi-label">Rutinas de Riego Activas</span>
+            <strong class="kpi-value">{{ dashboardData.resumen.rutinas_activas }}</strong>
+            <small>Optimizadas por IA y manuales</small>
+          </div>
+
+          <div class="kpi-card rosy">
+            <span class="kpi-label">Alertas de Plagas (NLP)</span>
+            <strong class="kpi-value">{{ dashboardData.resumen.alertas_plagas_activas }}</strong>
+            <small>Urgencia Alta / Crítica en bitácoras</small>
+          </div>
+
+          <div class="kpi-card moss">
+            <span class="kpi-label">Intentos No Autorizados</span>
+            <strong class="kpi-value">{{ dashboardData.resumen.intentos_no_autorizados_totales }}</strong>
+            <small>Protección de válvulas por Token</small>
+          </div>
+        </div>
+
+        <!-- Telemetría en Tiempo Real de la Última Lectura (`lecturas_sensores`) -->
+        <div class="card-block" *ngIf="dashboardData.ultima_lectura as ul">
+          <div class="card-header-row">
+            <div>
+              <span class="section-tag">Colección: lecturas_sensores</span>
+              <h3>
+                Variables Hídricas Actuales — {{ ul.ubicacion.sector }} ({{ ul.dispositivo_id }})
+              </h3>
+            </div>
+            <span class="cultivo-badge" [class.hidro]="ul.tipo_cultivo === 'hidroponico'">
+              Cultivo {{ ul.tipo_cultivo | uppercase }}
+            </span>
+          </div>
+
+          <div class="sensor-gauges">
+            <div class="gauge-item">
+              <span class="gauge-title">Humedad del Suelo / Sustrato</span>
+              <div class="gauge-number midnight-text">{{ ul.lecturas.humedad_suelo }}%</div>
+              <div class="progress-bar">
+                <div class="fill midnight-fill" [style.width.%]="ul.lecturas.humedad_suelo"></div>
+              </div>
+              <small>Rango óptimo: 45% - 80%</small>
+            </div>
+
+            <div class="gauge-item">
+              <span class="gauge-title">Potencial de Hidrógeno (pH)</span>
+              <div class="gauge-number moss-text">{{ ul.lecturas.ph }}</div>
+              <div class="progress-bar">
+                <div class="fill moss-fill" [style.width.%]="(ul.lecturas.ph / 14) * 100"></div>
+              </div>
+              <small>Rango óptimo: 5.5 - 6.8</small>
+            </div>
+
+            <div class="gauge-item">
+              <span class="gauge-title">Electroconductividad (EC)</span>
+              <div class="gauge-number primary-text">{{ ul.lecturas.electroconductividad }} <small>mS/cm</small></div>
+              <div class="progress-bar">
+                <div class="fill primary-fill" [style.width.%]="(ul.lecturas.electroconductividad / 4) * 100"></div>
+              </div>
+              <small>Nutrientes disueltos en solución</small>
+            </div>
+
+            <div class="gauge-item">
+              <span class="gauge-title">Evaporación Predicha (Red Neuronal)</span>
+              <div class="gauge-number rosy-text">{{ ul.lecturas.evaporacion_predicha }} <small>mm/día</small></div>
+              <div class="progress-bar">
+                <div class="fill rosy-fill" [style.width.%]="(ul.lecturas.evaporacion_predicha / 8) * 100"></div>
+              </div>
+              <small>Estimación del Modelo IA de Riego</small>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dos columnas: Control Rápido de Circuitos ESP32 + Simulador de Lecturas -->
+        <div class="two-col-grid">
+          <div class="card-block">
+            <div class="card-header-row">
+              <div>
+                <span class="section-tag">Control Rápido Multi-Circuito</span>
+                <h3>Estado de Áreas de Riego (ESP32)</h3>
+              </div>
+              <button type="button" class="btn-outline-sm" (click)="cambiarVista('circuitos')">
+                + Agregar Circuito
+              </button>
+            </div>
+
+            <div class="circuit-quick-list">
+              <div class="circuit-mini-row" *ngFor="let c of circuitos">
+                <div>
+                  <strong>{{ c.nombre_circuito || c.dispositivo_id }}</strong>
+                  <small>
+                    {{ c.dispositivo_id }} • {{ c.sector_id }} •
+                    <span class="text-emph">{{ c.tipo_cultivo | uppercase }}</span>
+                  </small>
+                </div>
+                <div class="circuit-actions">
+                  <span class="valve-pill" [class.open]="c.valvula_abierta">
+                    {{ c.valvula_abierta ? 'VÁLVULA ABIERTA' : 'VÁLVULA CERRADA' }}
+                  </span>
+                  <button
+                    type="button"
+                    class="btn-valve-toggle"
+                    [class.close-mode]="c.valvula_abierta"
+                    (click)="toggleValvulaCircuito(c)"
+                  >
+                    {{ c.valvula_abierta ? 'Cerrar Válvula' : 'Abrir Válvula' }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Simulador de Telemetría ESP32 -->
+          <div class="card-block">
+            <span class="section-tag">Prueba en Vivo de Sensores + IA</span>
+            <h3>Inyectar Lectura de Sensores</h3>
+            <p class="helper-text">
+              Simula el envío de datos desde un circuito ESP32 y calcula automáticamente la evaporación predicha.
+            </p>
+
+            <div class="compact-form">
+              <div class="form-row">
+                <label>Circuito ESP32:</label>
+                <select [(ngModel)]="simDispositivoId">
+                  <option *ngFor="let c of circuitos" [value]="c.dispositivo_id">
+                    {{ c.dispositivo_id }} ({{ c.sector_id }})
+                  </option>
+                </select>
+              </div>
+              <div class="form-row-3">
+                <div>
+                  <label>Humedad (%)</label>
+                  <input type="number" step="0.5" [(ngModel)]="simHumedad" />
+                </div>
+                <div>
+                  <label>pH (0-14)</label>
+                  <input type="number" step="0.1" [(ngModel)]="simPh" />
+                </div>
+                <div>
+                  <label>EC (mS/cm)</label>
+                  <input type="number" step="0.05" [(ngModel)]="simEc" />
+                </div>
+              </div>
+              <button type="button" class="btn-solid-primary" (click)="registrarLecturaSimulada()">
+                Registrar Lectura y Predecir Evaporación
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tabla de Historial de Lecturas (`lecturas_sensores`) -->
+        <div class="card-block">
+          <span class="section-tag">Sincronización NoSQL Cloud</span>
+          <h3>Historial Reciente de `lecturas_sensores`</h3>
+          <div class="table-responsive">
+            <table class="agro-table">
+              <thead>
+                <tr>
+                  <th>Dispositivo ESP32</th>
+                  <th>Sector / Coordenadas</th>
+                  <th>Cultivo</th>
+                  <th>Humedad Suelo</th>
+                  <th>pH</th>
+                  <th>EC (mS/cm)</th>
+                  <th>Evaporación IA</th>
+                  <th>Timestamp</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let l of lecturas">
+                  <td><strong>{{ l.dispositivo_id }}</strong></td>
+                  <td>
+                    {{ l.ubicacion.sector }}
+                    <small class="coord-text">({{ l.ubicacion.coordenadas.join(', ') }})</small>
+                  </td>
+                  <td>
+                    <span class="cultivo-badge" [class.hidro]="l.tipo_cultivo === 'hidroponico'">
+                      {{ l.tipo_cultivo }}
+                    </span>
+                  </td>
+                  <td><strong>{{ l.lecturas.humedad_suelo }}%</strong></td>
+                  <td>{{ l.lecturas.ph }}</td>
+                  <td>{{ l.lecturas.electroconductividad }}</td>
+                  <td class="rosy-bold">{{ l.lecturas.evaporacion_predicha }} mm/día</td>
+                  <td>{{ l.timestamp.replace('T', ' ') }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================================================================
+           VISTA 2: CONFIGURACIÓN DE RIEGOS MANUALES Y OPTIMIZACIÓN IA
+           ==================================================================== -->
+      <section *ngIf="vistaActiva === 'riegos'" class="view-section">
+        <div class="two-col-grid">
+          <!-- Panel Izquierdo: Configurar Riego Manual -->
+          <div class="card-block">
+            <span class="section-tag">Control Manual de Operador</span>
+            <h3>Configurar Riego y Fertirriego Manual</h3>
+            <p class="helper-text">
+              Selecciona el circuito ESP32 del área a regar, ajusta la duración, litros de agua y mezcla de nutrientes A/B.
+            </p>
+
+            <div class="compact-form">
+              <div class="form-row">
+                <label>Circuito ESP32 (Área de Riego):</label>
+                <select [(ngModel)]="manualDispositivoId">
+                  <option *ngFor="let c of circuitos" [value]="c.dispositivo_id">
+                    {{ c.dispositivo_id }} — {{ c.sector_id }} ({{ c.tipo_cultivo }})
+                  </option>
+                </select>
+              </div>
+
+              <div class="form-row-2">
+                <div>
+                  <label>Duración (minutos)</label>
+                  <input type="number" min="1" max="180" [(ngModel)]="manualDuracionMin" />
+                </div>
+                <div>
+                  <label>Volumen de Agua (Litros)</label>
+                  <input type="number" step="5" [(ngModel)]="manualVolumenLitros" />
+                </div>
+              </div>
+
+              <div class="form-row-2">
+                <div>
+                  <label>Fertirriego: Nutriente A (ml/g)</label>
+                  <input type="number" min="0" [(ngModel)]="manualNutrienteA" />
+                </div>
+                <div>
+                  <label>Fertirriego: Nutriente B (ml/g)</label>
+                  <input type="number" min="0" [(ngModel)]="manualNutrienteB" />
+                </div>
+              </div>
+
+              <div class="form-row checkbox-row">
+                <label class="switch-label">
+                  <input type="checkbox" [(ngModel)]="manualEjecutarAhora" />
+                  <span>Ejecutar inmediatamente (Abrir electroválvula del ESP32 ahora)</span>
+                </label>
+              </div>
+
+              <div class="form-row" *ngIf="!manualEjecutarAhora">
+                <label>Fecha y Hora Programada:</label>
+                <input type="text" [(ngModel)]="manualFechaProgramada" placeholder="2026-11-09T19:00:00" />
+              </div>
+
+              <button type="button" class="btn-solid-primary" (click)="guardarRiegoManual()">
+                {{ manualEjecutarAhora ? 'Iniciar Riego Manual Ahora' : 'Guardar Riego Manual Programado' }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Panel Derecho: Previsión y Optimización con IA (Modelo 2) -->
+          <div class="card-block highlight-midnight">
+            <span class="section-tag midnight">Modelo 2 de IA (Colab / Genético + Red Neuronal)</span>
+            <h3>Previsión y Optimización Inteligente de Riego</h3>
+            <p class="helper-text">
+              Calcula automáticamente la evaporación predicha, el volumen óptimo de agua y la dosificación de Nutriente A y B.
+            </p>
+
+            <div class="compact-form">
+              <div class="form-row">
+                <label>Circuito a Optimizar con IA:</label>
+                <select [(ngModel)]="iaDispositivoId">
+                  <option *ngFor="let c of circuitos" [value]="c.dispositivo_id">
+                    {{ c.dispositivo_id }} — {{ c.sector_id }} ({{ c.area_cobertura_m2 || 250 }} m²)
+                  </option>
+                </select>
+              </div>
+
+              <div class="form-row-3">
+                <div>
+                  <label>Humedad Actual (%)</label>
+                  <input type="number" step="0.5" [(ngModel)]="iaHumedad" />
+                </div>
+                <div>
+                  <label>pH Actual</label>
+                  <input type="number" step="0.1" [(ngModel)]="iaPh" />
+                </div>
+                <div>
+                  <label>EC Actual (mS/cm)</label>
+                  <input type="number" step="0.05" [(ngModel)]="iaEc" />
+                </div>
+              </div>
+
+              <button type="button" class="btn-solid-midnight" (click)="ejecutarOptimizacionIA()">
+                Generar Rutina Óptima con Modelo de IA
+              </button>
+
+              <div class="ia-result-banner" *ngIf="ultimaEvaporacionPredicha !== null">
+                <strong>Evaporación Predicha por IA: {{ ultimaEvaporacionPredicha }} mm/día</strong>
+                <span>Se ha agregado la nueva rutina optimizada a la colección `rutinas_riego`.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Listado de Rutinas (`rutinas_riego`) -->
+        <div class="card-block">
+          <span class="section-tag">Colección: rutinas_riego</span>
+          <h3>Rutinas de Riego y Fertirriego Registradas</h3>
+
+          <div class="routines-grid">
+            <div class="routine-card" *ngFor="let r of rutinas">
+              <div class="routine-top">
+                <div>
+                  <span class="mode-badge" [class.manual]="r.modo === 'manual'">
+                    {{ r.modo === 'manual' ? 'RIEGO MANUAL' : 'OPTIMIZADO POR IA' }}
+                  </span>
+                  <h4>{{ r.sector_id }}</h4>
+                  <small>{{ r.dispositivo_id || 'ESP32-CIRCUITO-01' }} • {{ r.algoritmo_utilizado }}</small>
+                </div>
+                <span class="state-pill" [attr.data-state]="r.estado">{{ r.estado }}</span>
+              </div>
+
+              <div class="routine-metrics">
+                <div>
+                  <span>Duración</span>
+                  <strong>{{ r.parametros_optimizados.duracion_minutos }} min</strong>
+                </div>
+                <div>
+                  <span>Volumen Agua</span>
+                  <strong>{{ r.parametros_optimizados.volumen_agua_litros }} L</strong>
+                </div>
+                <div>
+                  <span>Nutriente A</span>
+                  <strong>{{ r.parametros_optimizados.mezcla_fertirriego.nutriente_a }} ml</strong>
+                </div>
+                <div>
+                  <span>Nutriente B</span>
+                  <strong>{{ r.parametros_optimizados.mezcla_fertirriego.nutriente_b }} ml</strong>
+                </div>
+              </div>
+
+              <div class="routine-footer">
+                <small>Fecha: {{ r.fecha_programada }}</small>
+                <div class="routine-btns">
+                  <button
+                    type="button"
+                    class="btn-mini start"
+                    *ngIf="r.estado === 'Programado'"
+                    (click)="actualizarEstadoRutina(r, 'En Curso')"
+                  >
+                    Ejecutar Ahora
+                  </button>
+                  <button
+                    type="button"
+                    class="btn-mini complete"
+                    *ngIf="r.estado === 'En Curso' || r.estado === 'Manual Activo'"
+                    (click)="actualizarEstadoRutina(r, 'Completado')"
+                  >
+                    Finalizar y Cerrar Válvula
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================================================================
+           VISTA 3: BITÁCORAS DE CAMPO Y DETECCIÓN DE PLAGAS (MINERÍA DE TEXTO)
+           ==================================================================== -->
+      <section *ngIf="vistaActiva === 'bitacoras'" class="view-section">
+        <div class="two-col-grid">
+          <div class="card-block">
+            <span class="section-tag rosy">Modelo 1 de IA — Minería de Texto (NLP)</span>
+            <h3>Redactar Reporte de Campo (`bitacoras_sensores`)</h3>
+            <p class="helper-text">
+              Escribe las observaciones del cultivo en lenguaje natural. El modelo de IA extraerá palabras clave, detectará la plaga y clasificará el nivel de urgencia.
+            </p>
+
+            <div class="sample-chips">
+              <span>Probar ejemplos rápidos:</span>
+              <button type="button" (click)="cargarEjemploBitacora('mosca')">Ejemplo Mosca Blanca</button>
+              <button type="button" (click)="cargarEjemploBitacora('arana')">Ejemplo Araña Roja</button>
+              <button type="button" (click)="cargarEjemploBitacora('sano')">Ejemplo Cultivo Sano</button>
+            </div>
+
+            <div class="compact-form">
+              <div class="form-row">
+                <label>Circuito / Sector Inspeccionado:</label>
+                <select [(ngModel)]="bitacoraDispositivoId">
+                  <option *ngFor="let c of circuitos" [value]="c.dispositivo_id">
+                    {{ c.dispositivo_id }} — {{ c.sector_id }}
+                  </option>
+                </select>
+              </div>
+
+              <div class="form-row">
+                <label>Observación de Campo (`texto_raw`):</label>
+                <textarea
+                  rows="4"
+                  [(ngModel)]="bitacoraTextoRaw"
+                  (input)="analizarBitacoraEnVivo()"
+                  placeholder="Ej. Se observan colonias de mosca blanca en el envés de las hojas del sector norte..."
+                ></textarea>
+              </div>
+
+              <div class="btn-row-dual">
+                <button type="button" class="btn-outline-sm" (click)="analizarBitacoraEnVivo()">
+                  Previsualizar IA
+                </button>
+                <button type="button" class="btn-solid-primary" (click)="guardarBitacoraConIA()">
+                  Analizar con IA y Guardar en MongoDB
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Resultado en Vivo del Clasificador NLP -->
+          <div class="card-block">
+            <span class="section-tag">Salida Estructurada: procesamiento_ia</span>
+            <h3>Resultado del Modelo Detector de Plagas</h3>
+
+            <div class="nlp-preview-box" *ngIf="previsualizacionIA as ia; else emptyNlp">
+              <div class="nlp-row">
+                <span>Plaga Detectada:</span>
+                <strong class="plague-title">{{ ia.plaga_detectada }}</strong>
+              </div>
+              <div class="nlp-row">
+                <span>Nivel de Urgencia:</span>
+                <span class="urgency-badge" [attr.data-urgency]="ia.nivel_urgencia">
+                  {{ ia.nivel_urgencia | uppercase }}
+                </span>
+              </div>
+              <div class="nlp-row">
+                <span>Categoría Asignada:</span>
+                <strong>{{ ia.categoria }}</strong>
+              </div>
+              <div class="nlp-row">
+                <span>Palabras Clave Extraídas:</span>
+                <div class="keyword-list">
+                  <span class="kw-chip" *ngFor="let kw of ia.palabras_clave">#{{ kw }}</span>
+                </div>
+              </div>
+            </div>
+
+            <ng-template #emptyNlp>
+              <div class="empty-nlp-state">
+                <p>Escribe un reporte o selecciona uno de los ejemplos rápidos para ver la extracción de entidades en tiempo real.</p>
+              </div>
+            </ng-template>
+          </div>
+        </div>
+
+        <!-- Historial de Bitácoras Clasificadas -->
+        <div class="card-block">
+          <span class="section-tag">Colección: bitacoras_sensores</span>
+          <h3>Bitácoras Agrícolas Clasificadas por IA</h3>
+
+          <div class="bitacora-list">
+            <div class="bitacora-item" *ngFor="let b of bitacoras">
+              <div class="bitacora-header">
+                <div>
+                  <strong>{{ b.procesamiento_ia.plaga_detectada }}</strong>
+                  <small>
+                    Agricultor: {{ b.agricultor_id }} • {{ b.sector_id || b.dispositivo_id }} • {{ b.fecha_registro }}
+                  </small>
+                </div>
+                <span class="urgency-badge" [attr.data-urgency]="b.procesamiento_ia.nivel_urgencia">
+                  Urgencia: {{ b.procesamiento_ia.nivel_urgencia }}
+                </span>
+              </div>
+              <p class="raw-text">"{{ b.texto_raw }}"</p>
+              <div class="bitacora-footer">
+                <span class="cat-label">{{ b.procesamiento_ia.categoria }}</span>
+                <div class="keyword-list">
+                  <span class="kw-chip" *ngFor="let kw of b.procesamiento_ia.palabras_clave">#{{ kw }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================================================================
+           VISTA 4: CIRCUITOS IoT (ESP32) Y SEGURIDAD INFORMÁTICA
+           ==================================================================== -->
+      <section *ngIf="vistaActiva === 'circuitos'" class="view-section">
+        <div class="two-col-grid">
+          <!-- Formulario para Agregar un Nuevo Circuito ESP32 -->
+          <div class="card-block">
+            <span class="section-tag">Escalabilidad Multi-Circuito</span>
+            <h3>Registrar Nuevo Circuito de Riego (ESP32)</h3>
+            <p class="helper-text">
+              Cada circuito ESP32 cubre un área o sector independiente. Al registrarlo se genera su `token_autenticacion` único y su código `.ino` listo para flashear.
+            </p>
+
+            <div class="compact-form">
+              <div class="form-row-2">
+                <div>
+                  <label>ID del Dispositivo ESP32</label>
+                  <input type="text" [(ngModel)]="nuevoCircuito.dispositivo_id" placeholder="ESP32-CIRCUITO-04" />
+                </div>
+                <div>
+                  <label>Sistema de Cultivo</label>
+                  <select [(ngModel)]="nuevoCircuito.tipo_cultivo">
+                    <option value="rodado">Riego Rodado (Suelo)</option>
+                    <option value="hidroponico">Hidropónico (Sustrato / NFT)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <label>Nombre Descriptivo del Circuito</label>
+                <input type="text" [(ngModel)]="nuevoCircuito.nombre_circuito" />
+              </div>
+
+              <div class="form-row-3">
+                <div>
+                  <label>Sector / Área Cubierta</label>
+                  <input type="text" [(ngModel)]="nuevoCircuito.sector_id" />
+                </div>
+                <div>
+                  <label>Área Cobertura (m²)</label>
+                  <input type="number" [(ngModel)]="nuevoCircuito.area_cobertura_m2" />
+                </div>
+                <div>
+                  <label>IP Asignada en Campo</label>
+                  <input type="text" [(ngModel)]="nuevoCircuito.ip_asignada" />
+                </div>
+              </div>
+
+              <button type="button" class="btn-solid-primary" (click)="registrarNuevoCircuito()">
+                + Agregar Circuito ESP32 y Generar Token
+              </button>
+            </div>
+          </div>
+
+          <!-- Visor de Código Arduino (.ino) para el ESP32 seleccionado -->
+          <div class="card-block code-viewer-card">
+            <div class="card-header-row">
+              <div>
+                <span class="section-tag midnight">Integración Hardware IoT</span>
+                <h3>
+                  {{
+                    codigoInoSeleccionado
+                      ? 'Firmware Arduino: ' + codigoInoSeleccionado.nombre_archivo
+                      : 'Generador de Código para ESP32 (.ino)'
+                  }}
+                </h3>
+              </div>
+              <button
+                *ngIf="codigoInoSeleccionado"
+                type="button"
+                class="btn-outline-sm"
+                (click)="copiarTexto(codigoInoSeleccionado.codigo_ino, 'Código Arduino .ino')"
+              >
+                Copiar Código .ino
+              </button>
+            </div>
+
+            <pre class="arduino-code-box" *ngIf="codigoInoSeleccionado; else selectCircuitMsg"><code>{{ codigoInoSeleccionado.codigo_ino }}</code></pre>
+            <ng-template #selectCircuitMsg>
+              <div class="empty-nlp-state">
+                <p>
+                  Haz clic en <strong>"Ver Código ESP32 (.ino)"</strong> en cualquiera de tus circuitos de abajo para obtener el sketch de Arduino preconfigurado con su ID y Token de seguridad.
+                </p>
+              </div>
+            </ng-template>
+          </div>
+        </div>
+
+        <!-- Tarjetas de `dispositivos_seguridad` -->
+        <div class="card-block">
+          <span class="section-tag">Colección: dispositivos_seguridad (Seguridad Informática)</span>
+          <h3>Circuitos ESP32 Registrados y Monitoreo de Válvulas</h3>
+
+          <div class="circuits-grid">
+            <div
+              class="circuit-security-card"
+              *ngFor="let c of circuitos"
+              [class.alert-border]="c.seguridad.intentos_no_autorizados >= 3"
+            >
+              <div class="c-head">
+                <div>
+                  <span class="c-id">{{ c.dispositivo_id }}</span>
+                  <h4>{{ c.nombre_circuito || c.sector_id }}</h4>
+                  <small>{{ c.tipo }} • Cobertura: {{ c.area_cobertura_m2 || 250 }} m²</small>
+                </div>
+                <span class="c-status" [class.danger]="c.seguridad.intentos_no_autorizados >= 3">
+                  {{ c.estado_actual }}
+                </span>
+              </div>
+
+              <div class="security-details">
+                <div class="sec-row">
+                  <span>Sector / Cultivo:</span>
+                  <strong>{{ c.sector_id }} ({{ c.tipo_cultivo }})</strong>
+                </div>
+                <div class="sec-row">
+                  <span>IP Asignada:</span>
+                  <code>{{ c.seguridad.ip_asignada }}</code>
+                </div>
+                <div class="sec-row">
+                  <span>Token Autenticación:</span>
+                  <div class="token-box">
+                    <code>{{ c.seguridad.token_autenticacion }}</code>
+                    <button
+                      type="button"
+                      class="btn-copy"
+                      (click)="copiarTexto(c.seguridad.token_autenticacion, 'Token')"
+                    >
+                      Copiar
+                    </button>
+                  </div>
+                </div>
+                <div class="sec-row">
+                  <span>Último Acceso Autorizado:</span>
+                  <strong>{{ c.seguridad.ultimo_acceso_autorizado }}</strong>
+                </div>
+                <div class="sec-row">
+                  <span>Intentos No Autorizados:</span>
+                  <strong [class.rosy-bold]="c.seguridad.intentos_no_autorizados > 0">
+                    {{ c.seguridad.intentos_no_autorizados }} intentos bloqueados
+                  </strong>
+                </div>
+              </div>
+
+              <div class="circuit-card-actions">
+                <button
+                  type="button"
+                  class="btn-valve-toggle"
+                  [class.close-mode]="c.valvula_abierta"
+                  (click)="toggleValvulaCircuito(c)"
+                >
+                  {{ c.valvula_abierta ? 'Cerrar Electroválvula' : 'Abrir Electroválvula' }}
+                </button>
+                <button type="button" class="btn-sec-action" (click)="verCodigoArduino(c)">
+                  Ver Código ESP32 (.ino)
+                </button>
+                <button type="button" class="btn-sec-action" (click)="rotarToken(c)">
+                  Rotar Token
+                </button>
+                <button type="button" class="btn-sec-action warn" (click)="simularIntentoNoAutorizado(c)">
+                  Simular Intruso
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
   </div>
 </ion-content>

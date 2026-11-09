@@ -1,2 +1,76 @@
-// For information on how to create your own theme, please refer to:
-// https://ionicframework.com/docs/theming/
+// ============================================================================
+// PALETA DE COLORES OFICIAL — AGROSMART HYDRO-SOIL
+// "Fresh / Natural / Modern / Timeless"
+// ============================================================================
+
+:root {
+  // 1. Dark Green (#0A3323) — Calm / Natural / Rich
+  --ags-dark-green-900: #0a3323;
+  --ags-dark-green-800: #1b4d37;
+  --ags-dark-green-700: #2e6b4f;
+  --ags-dark-green-500: #4e8f6f;
+  --ags-dark-green-300: #8fb99a;
+  --ags-dark-green-100: #d6e7d6;
+
+  // 2. Moss Green (#839958) — Fresh / Organic / Grounding
+  --ags-moss-green-900: #6b8a45;
+  --ags-moss-green-800: #839958;
+  --ags-moss-green-600: #8fae6b;
+  --ags-moss-green-400: #a9c78a;
+  --ags-moss-green-200: #c8d9a6;
+  --ags-moss-green-100: #e5eed5;
+
+  // 3. Beige (#F7F4D5) — Soft / Warm / Versatile
+  --ags-beige-100: #f7f4d5;
+  --ags-beige-200: #eadfc6;
+  --ags-beige-300: #d9c9a8;
+  --ags-beige-500: #c2b08a;
+  --ags-beige-700: #9e8f6e;
+  --ags-beige-900: #7b6f56;
+
+  // 4. Rosy Brown (#D3968C) — Warm / Elegant / Soft (Alertas y Plagas)
+  --ags-rosy-brown-300: #d3968c;
+  --ags-rosy-brown-400: #c67f7a;
+  --ags-rosy-brown-500: #a96a66;
+  --ags-rosy-brown-700: #8f5b56;
+  --ags-rosy-brown-800: #6e4a46;
+  --ags-rosy-brown-900: #4e3a36;
+
+  // 5. Midnight Green (#105666) — Bold / Sophisticated / Modern (Agua e Hidroponía)
+  --ags-midnight-900: #105666;
+  --ags-midnight-700: #1f7a8c;
+  --ags-midnight-500: #3fa7b7;
+  --ags-midnight-400: #6ec2cd;
+  --ags-midnight-200: #a8dee3;
+  --ags-midnight-100: #d6f3f6;
+
+  // Mapeo a variables de Ionic
+  --ion-color-primary: #0a3323;
+  --ion-color-primary-rgb: 10, 51, 35;
+  --ion-color-primary-contrast: #f7f4d5;
+  --ion-color-primary-contrast-rgb: 247, 244, 213;
+  --ion-color-primary-shade: #082b1d;
+  --ion-color-primary-tint: #1b4d37;
+
+  --ion-color-secondary: #839958;
+  --ion-color-secondary-rgb: 131, 153, 88;
+  --ion-color-secondary-contrast: #ffffff;
+  --ion-color-secondary-contrast-rgb: 255, 255, 255;
+  --ion-color-secondary-shade: #6b8a45;
+  --ion-color-secondary-tint: #8fae6b;
+
+  --ion-color-tertiary: #105666;
+  --ion-color-tertiary-rgb: 16, 86, 102;
+  --ion-color-tertiary-contrast: #ffffff;
+  --ion-color-tertiary-contrast-rgb: 255, 255, 255;
+  --ion-color-tertiary-shade: #0e4c5a;
+  --ion-color-tertiary-tint: #1f7a8c;
+
+  --ion-color-success: #2e6b4f;
+  --ion-color-warning: #c2b08a;
+  --ion-color-danger: #a96a66;
+
+  --ion-background-color: #f9f7e8;
+  --ion-text-color: #0a3323;
+  --ion-font-family: 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
